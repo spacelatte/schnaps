@@ -1,0 +1,6 @@
+[submodule "qr"]
+	path = qr
+	url = https://github.com/LazarSoft/jsqrcode.git
+[submodule "md5"]
+	path = md5
+	url = https://github.com/blueimp/JavaScript-MD5.git
