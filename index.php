@@ -1,9 +1,12 @@
 <?php
+	if(!empty($_GET) && isset($_GET["list"])) {
+		exit(0);
+	}
 	$data = file_get_contents('php://input');
 	if(!empty($data)) {
 		//print_r($data);
 		$json = json_decode($data, true);
-		$name = md5($json["name"]);
+		$name = "./data/" + md5($json["name"]);
 		$data = $json["data"];
 		switch($json["type"]) {
 			case "up":
@@ -55,27 +58,43 @@
 		<meta name="theme-color" content="navy">
 		<meta charset="utf-8" />
 		<style>
+			html, body {
+				margin:0;
+				padding:0;
+			}
 			html {
 				background-color: navy;
 			}
 			body {
 				background-color: white;
 			}
-			#upload, #download, #viewer {
+			#viewer {
 				display: inline-block;
 				width: 49%;
 				height: 100%;
 				padding: 3%;
 				border: 0px solid black;
 				font-size: 0px;
+			}
+			.btn {
+				display:inline-block;
+				width:240px;
+				height:240px;
+				font-size:0;
 				background-size: contain;
 				background-position: center center;
 				background-repeat: no-repeat;
 				background-origin: content-box;
 				box-sizing: border-box;
 			}
-			#main { background-color: white; }
-			#main, #viewer, #reader, VIDEO, CANVAS {
+			#main {
+				position:absolute;
+				background-color: white;
+				text-align:center;
+				min-height:100vh;
+				min-width:100vw;
+			}
+			#viewer, #reader, VIDEO, CANVAS {
 				position: fixed;
 				top: 0;
 				left: 0;
@@ -86,11 +105,23 @@
 			}
 			#upload {
 				background-image:url(up.ico);
-				float: left;
 			}
 			#download {
 				background-image:url(down.ico);
-				float: right;
+			}
+			#local {
+				background-image:url(disk.png);
+			}
+			.img {
+				display:block;
+				width:80vw;
+				height:80vw;
+				margin:12px auto;
+				font-size:0;
+				background-repeat:no-repeat;
+				background-size:contain;
+				background-color:black;
+				background-position:center;
 			}
 			VIDEO, _CANVAS {
 				z-index: 99;
@@ -110,8 +141,9 @@
 		<div id=reader ></div>
 		<div id=viewer ></div>
 		<div id=main >
-			<span id=upload >yukle</span>
-			<span id=download >getir</span>
+			<span class=btn id=upload >yukle</span>
+			<span class=btn id=download >getir</span>
+			<span class=btn id=local >bak</span>
 		</div>
 	</body>
 <script type="text/javascript" src="./qr/src/grid.js"></script>
@@ -144,13 +176,23 @@
 			let image = document.getElementById("qr-canvas").toDataURL();
 			let viewer = document.getElementById("viewer");
 			let xhr = new XMLHttpRequest();
+			if( window.localStorage.getItem(md5(data)) ) {
+				document.getElementById("main").style.opacity = "1";
+				viewer.style.backgroundImage = "url("
+					+ window.localStorage.getItem(md5(data)) + ")";
+				viewer.style.backgroundSize = "100%";
+				viewer.style.zIndex = "99";
+				proc = false;
+				kill();
+				return;
+			}
 			xhr.onloadend = function(e) {
 				proc = false;
 				document.getElementById("main").style.opacity = "1";
 				if(this.status !== 200) {
 					return;
 				}
-				document.getElementById("viewer").style.zIndex = "99";
+				viewer.style.zIndex = "99";
 				if(!this.response.image) {
 					viewer.style.backgroundImage = "url(//i.ytimg.com/vi/lFjWA5w74nY/maxresdefault.jpg)";
 					return;
@@ -166,6 +208,7 @@
 						console.log("invalid type:", type);
 						break;
 				}
+				window.localStorage.setItem(md5(data), this.response.image);
 				return;
 			};
 			xhr.open("POST", window.location, true);
@@ -180,6 +223,7 @@
 				}, null, 4)
 			);
 			document.getElementById("main").style.opacity = "0";
+			//window.localStorage.setItem(md5(data), image);
 			kill();
 			return;
 		}
@@ -245,6 +289,12 @@
 			});
 			return;
 		}
+		function view(image) {
+			viewer.style.zIndex = "99";
+			viewer.style.backgroundImage = "url(" + image + ")";
+			viewer.style.backgroundSize = "100%";
+			return;
+		}
 		window.onload = function() {
 			document.getElementById("upload").addEventListener("click", function(e) {
 				type = "up";
@@ -264,6 +314,33 @@
 				this.style.backgroundImage = "";
 				this.style.backgroundSize = "";
 				this.style.zIndex = 0;
+				return;
+			});
+			document.getElementById("local").addEventListener("click", function(e) {
+				let stor = window.localStorage;
+				let main = document.getElementById("main");
+				let orig = main.innerHTML;
+				window.orig = orig;
+				main.innerHTML = "<a href='#' class=img style='width:72px;height:72px;background-color:transparent;background-image:url(back.png);' onclick='javascript:document.getElementById(\"main\").innerHTML = window.orig; window.onload(null); ' ></a>";
+			//	main.getElementsByTagName("A")[0].addEventListener("click", function(e) {
+			//		document.getElementById("main").innerHTML = orig;
+			//		return;
+			//	});
+				for(let i=0; i<stor.length; i++) {
+					let key = stor.key(i);
+					let obj = stor.getItem(key);
+					let elem = "<a href='"
+						+ obj
+						+ "' style='background-image:url("
+						+ obj
+						+ ");' "
+						+ "class='img' "
+						+ ">"
+						+ key
+						+ "</a>";
+					main.innerHTML += elem;
+					continue;
+				}
 				return;
 			});
 			getPerm();
