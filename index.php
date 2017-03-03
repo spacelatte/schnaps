@@ -1,12 +1,35 @@
 <?php
-	if(!empty($_GET) && isset($_GET["list"])) {
+	const BASEDIR = "./data/";
+	if(!empty($_GET)) {
+		if(isset($_GET["list"])) {
+			$cont = scandir(BASEDIR);
+			?>
+				<style>
+					img {
+						display:block;
+						width:90%;
+						height:auto;
+						margin:4px auto;
+						box-sizing:border-box;
+					}
+				</style>
+				<a href="./">back</a>
+			<?php
+			for($i=2; $i<sizeof($cont); $i++) {
+				echo "<img src='".file_get_contents(BASEDIR.$cont[$i])."'></img>\n";
+			}
+			exit(0);
+		}
+		if(strlen($_SERVER["QUERY_STRING"])) {
+			echo file_get_contents(BASEDIR.md5($_SERVER["QUERY_STRING"]));
+		}
 		exit(0);
 	}
 	$data = file_get_contents('php://input');
 	if(!empty($data)) {
 		//print_r($data);
 		$json = json_decode($data, true);
-		$name = "./data/" + md5($json["name"]);
+		$name = BASEDIR.md5($json["name"]);
 		$data = $json["data"];
 		switch($json["type"]) {
 			case "up":
@@ -36,9 +59,12 @@
 				);
 				break;
 			default:
+				file_put_contents($name, $data);
 				echo json_encode(
 					array(
-						"status" => "fail",
+						"status" => "ok",
+						"image" => "data:image/png;base64,".base64_encode(file_get_contents("https://chart.googleapis.com/chart?cht=qr&chs=512x512&chl="
+							.urlencode($json["type"]))),
 					)
 				);
 				break;
@@ -56,6 +82,7 @@
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="theme-color" content="navy">
+		<link rel="icon" type="image/png" href="./nb.png" />
 		<meta charset="utf-8" />
 		<style>
 			html, body {
@@ -86,13 +113,17 @@
 				background-repeat: no-repeat;
 				background-origin: content-box;
 				box-sizing: border-box;
+				margin:8px;
+				_transform:translateY(33%);
 			}
 			#main {
-				position:absolute;
+				overflow:auto;
+				position:relative;
 				background-color: white;
 				text-align:center;
 				min-height:100vh;
-				min-width:100vw;
+				_min-width:100vw;
+				padding-bottom:12px;
 			}
 			#viewer, #reader, VIDEO, CANVAS {
 				position: fixed;
@@ -112,6 +143,12 @@
 			#local {
 				background-image:url(disk.png);
 			}
+			#code {
+				background-image:url(qr.png);
+			}
+			#trash {
+				background-image:url(trash.svg);
+			}
 			.img {
 				display:block;
 				width:80vw;
@@ -129,11 +166,11 @@
 				height: 100%;
 			}
 			#viewer, #reader, VIDEO, CANVAS {
-				background-color: black;
-				background-image: url("./loader.gif");
+				background-color: rgb(43,40,40);
+				background-image: url("./loop.gif");
 				background-position: center center;
 				background-repeat: no-repeat;
-				background-size: 50%;
+				background-size: contain;
 			}
 		</style>
 	</head>
@@ -144,6 +181,8 @@
 			<span class=btn id=upload >yukle</span>
 			<span class=btn id=download >getir</span>
 			<span class=btn id=local >bak</span>
+			<span class=btn id=trash >temizle</span>
+			<span class=btn id=code >yarat</span>
 		</div>
 	</body>
 <script type="text/javascript" src="./qr/src/grid.js"></script>
@@ -177,10 +216,10 @@
 			let viewer = document.getElementById("viewer");
 			let xhr = new XMLHttpRequest();
 			if( window.localStorage.getItem(md5(data)) ) {
-				document.getElementById("main").style.opacity = "1";
+				viewer.style.backgroundSize = "contain";
+				document.getElementById("main").style.visibility = "visible";
 				viewer.style.backgroundImage = "url("
 					+ window.localStorage.getItem(md5(data)) + ")";
-				viewer.style.backgroundSize = "100%";
 				viewer.style.zIndex = "99";
 				proc = false;
 				kill();
@@ -188,7 +227,8 @@
 			}
 			xhr.onloadend = function(e) {
 				proc = false;
-				document.getElementById("main").style.opacity = "1";
+				viewer.style.backgroundSize = "contain";
+				document.getElementById("main").style.visibility = "visible";
 				if(this.status !== 200) {
 					return;
 				}
@@ -198,16 +238,15 @@
 					return;
 				}
 				viewer.style.backgroundImage = "url(" + this.response.image + ")";
-				viewer.style.backgroundSize = "100%";
 				switch(type) {
 					case "up":
 						break;
 					case "dl":
 						break;
 					default:
-						console.log("invalid type:", type);
 						break;
 				}
+				type = null;
 				window.localStorage.setItem(md5(data), this.response.image);
 				return;
 			};
@@ -222,12 +261,13 @@
 					"data": image,
 				}, null, 4)
 			);
-			document.getElementById("main").style.opacity = "0";
+			document.getElementById("main").style.visibility = "hidden";
 			//window.localStorage.setItem(md5(data), image);
+			//alert(md5(data) + " " + data.substring(0,99));
 			kill();
 			return;
 		}
-		function camera(elem) {
+		function camera(elem, manual) {
 			elem.innerHTML = "";
 			navigator.mediaDevices.getUserMedia(window.opts).then(function(stream) {
 				window.str = stream;
@@ -239,9 +279,19 @@
 				canvas.style.display = "none";
 				elem.appendChild(video);
 				elem.appendChild(canvas);
-				window.int = setInterval(function(e) {
+				
+				setTimeout(function(e) {
 					canvas.width = video.videoWidth;
 					canvas.height = video.videoHeight;
+					return;
+				}, 999);
+				
+				if(manual !== undefined) {
+					video.id = manual;
+					type = manual;
+					return;
+				}
+				window.int = setInterval(function(e) {
 					canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
 					try {
 						qrcode.decode();
@@ -292,7 +342,7 @@
 		function view(image) {
 			viewer.style.zIndex = "99";
 			viewer.style.backgroundImage = "url(" + image + ")";
-			viewer.style.backgroundSize = "100%";
+			viewer.style.backgroundSize = "contain";
 			return;
 		}
 		window.onload = function() {
@@ -307,13 +357,35 @@
 				return;
 			});
 			document.getElementById("reader").addEventListener("click", function(e) {
+				if(type !== undefined && type.length > 3) {
+					let canvas = document.getElementById("qr-canvas");
+					let video = document.getElementsByTagName("video")[0];
+					let key = ""
+						+ window.location.protocol
+						+ "//"
+						+ window.location.hostname
+						+ ":"
+						+ window.location.port
+						+ window.location.pathname
+						+ "?"
+						+ type;
+					let tmp = type;
+					type = key;
+					canvas
+						.getContext("2d")
+						.drawImage(video, 0, 0, canvas.width, canvas.height);
+				//	setTimeout(function(e) {
+						process(tmp);
+				//		return;
+				//	}, 99);
+				}
 				kill();
 				return;
 			});
 			document.getElementById("viewer").addEventListener("click", function(e) {
 				this.style.backgroundImage = "";
 				this.style.backgroundSize = "";
-				this.style.zIndex = 0;
+				this.style.zIndex = "";
 				return;
 			});
 			document.getElementById("local").addEventListener("click", function(e) {
@@ -321,11 +393,13 @@
 				let main = document.getElementById("main");
 				let orig = main.innerHTML;
 				window.orig = orig;
+				main.style.visibility = "hidden";
 				main.innerHTML = "<a href='#' class=img style='width:72px;height:72px;background-color:transparent;background-image:url(back.png);' onclick='javascript:document.getElementById(\"main\").innerHTML = window.orig; window.onload(null); ' ></a>";
 			//	main.getElementsByTagName("A")[0].addEventListener("click", function(e) {
 			//		document.getElementById("main").innerHTML = orig;
 			//		return;
 			//	});
+				let buffer = "";
 				for(let i=0; i<stor.length; i++) {
 					let key = stor.key(i);
 					let obj = stor.getItem(key);
@@ -338,12 +412,27 @@
 						+ ">"
 						+ key
 						+ "</a>";
-					main.innerHTML += elem;
+					buffer += elem;
 					continue;
 				}
+				main.innerHTML += buffer;
+				main.style.visibility = "visible";
 				return;
 			});
-			getPerm();
+			document.getElementById("code").addEventListener("click", function(e) {
+				camera(document.getElementById("reader"), (Date.now() + ":" + Math.random()));
+				return;
+			});
+			document.getElementById("trash").addEventListener("click", function(e) {
+				if(confirm("are you sure?" + "\n" + "this will clear local cache only"))
+					window.localStorage.clear();
+				return;
+			});
+			if(window.location.search.length > 0) {
+				type = "dl";
+				main.style.visibility = "hidden";
+				process(window.location.search.substring(1));
+			}
 			select();
 			qrcode.callback = process;
 			console.log("init done");
@@ -351,16 +440,20 @@
 		};
 		function getPerm() {
 			navigator.mediaDevices.getUserMedia({video:true}).then(function(stream) {
-				stream.getTracks().forEach(function(track) {
-					track.stop();
+				setTimeout(function(e) {
+					stream.getTracks().forEach(function(track) {
+						track.stop();
+						return;
+					});
 					return;
-				});
+				}, 333);
 			}).catch(function(e) {
-				document.getElementById("main").style.opacity = "0";
+				document.getElementById("main").style.visibility = "visible";
 				console.log(e);
 				return;
 			});
 			return;
 		}
+		getPerm();
 	</script>
 </html>
