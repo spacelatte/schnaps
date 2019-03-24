@@ -33,19 +33,24 @@
 		$data = $json["data"];
 		switch($json["type"]) {
 			case "up":
-				file_put_contents($name, $data);
+				$res = file_put_contents($name, $data);
 				echo json_encode(
 					array(
 						"status" => "ok",
 						"image" => $data,
+						"data" => ($res),
+						"json" => $json,
 					)
 				);
+				file_put_contents($name.".meta", json_encode(getallheaders()));
 				break;
 			case "dl":
 				if(!file_exists($name)) {
 					echo json_encode(
 						array(
 							"status" => "fail",
+							"name" => $name,
+							"json" => $json,
 						)
 					);
 					break;
@@ -55,16 +60,22 @@
 					array(
 						"status" => "ok",
 						"image" => $data,
+						"json" => $json,
 					)
 				);
 				break;
 			default:
-				file_put_contents($name, $data);
+				$res = file_put_contents($name, $data);
 				echo json_encode(
 					array(
 						"status" => "ok",
-						"image" => "data:image/png;base64,".base64_encode(file_get_contents("https://chart.googleapis.com/chart?cht=qr&chs=512x512&chl="
+						"image" => "data:image/png;base64,"
+							.base64_encode(file_get_contents("https://chart.googleapis.com/chart?cht=qr&chs=512x512&chl="
 							.urlencode($json["type"]))),
+						"json" => $json,
+						"name" => $name,
+						"type" => $json["type"],
+						"data" => ($res),
 					)
 				);
 				break;
@@ -85,15 +96,42 @@
 		<link rel="icon" type="image/png" href="./nb.png" />
 		<meta charset="utf-8" />
 		<style>
+			* { transition: 0.2s; }
 			html, body {
 				margin:0;
 				padding:0;
 			}
 			html {
 				background-color: navy;
+				font-family:sans-serif;
 			}
 			body {
+				margin-top:80px;
 				background-color: white;
+			}
+			nav#nav {
+				position:fixed;
+				display:block;
+				top:0;
+				left:0;
+				right:0;
+				height:80px;
+				background-color:#9C27B0;
+				box-shadow:0 0 0.67em black;
+				box-sizing:border-box;
+				color:white;
+				z-index:99;
+				cursor:pointer;
+				overflow:hidden;
+			}
+			nav#nav a, nav#nav span {
+				display:block;
+				color:white;
+				text-decoration:none;
+				height:80px;
+				padding:22px;
+				font-size:28px;
+				margin:auto;
 			}
 			#viewer {
 				display: inline-block;
@@ -115,6 +153,10 @@
 				box-sizing: border-box;
 				margin:8px;
 				_transform:translateY(33%);
+			}
+			.btn:not(#code):hover {
+				border-radius:100%;
+				box-shadow:0rem 0rem 1rem black;
 			}
 			#main {
 				overflow:auto;
@@ -175,6 +217,11 @@
 		</style>
 	</head>
 	<body>
+		<nav id=nav >
+			<span style="white-space:pre;">|||  snap</span>
+			<a href="//pvtmert.github.com">Author</a>
+			<a href="./">Refresh</a>
+		</nav>
 		<div id=reader ></div>
 		<div id=viewer ></div>
 		<div id=main >
@@ -248,14 +295,29 @@
 				}
 				type = null;
 				window.localStorage.setItem(md5(data), this.response.image);
+				delete this.response.image;
+				console.log(JSON.stringify({
+				//	json: this.response.json,
+					data: this.response.data,
+					name: this.response.name,
+					type: this.response.type,
+					stat: this.response.status,
+				}, null, 4));
 				return;
 			};
 			xhr.open("POST", window.location, true);
 			xhr.withCredentials = true;
 			xhr.responseType = "json";
 			xhr.setRequestHeader("content-type", "text/plain");
+			console.log(JSON.stringify({
+				data: data,
+				type: type,
+				hash: md5(data),
+				seca: md5(type),
+			}, null, 4));
 			xhr.send(
 				JSON.stringify({
+					"args": [data],
 					"name": md5(data),
 					"type": type,
 					"data": image,
@@ -269,29 +331,25 @@
 		}
 		function camera(elem, manual) {
 			elem.innerHTML = "";
-			navigator.mediaDevices.getUserMedia(window.opts).then(function(stream) {
+			navigator.mediaDevices.getUserMedia(window.opts)
+				.then(function(stream) {
 				window.str = stream;
 				let video = document.createElement("video");
 				let canvas = document.createElement("canvas");
 				video.src = window.URL.createObjectURL(stream);
 				canvas.id = "qr-canvas";
-				canvas.style.zIndex = "111";
+				canvas.style.zIndex = "-1";
 				canvas.style.display = "none";
 				elem.appendChild(video);
 				elem.appendChild(canvas);
-				
-				setTimeout(function(e) {
-					canvas.width = video.videoWidth;
-					canvas.height = video.videoHeight;
-					return;
-				}, 999);
-				
 				if(manual !== undefined) {
 					video.id = manual;
 					type = manual;
 					return;
 				}
 				window.int = setInterval(function(e) {
+					canvas.width = parseInt(video.videoWidth/2);
+					canvas.height = parseInt(video.videoHeight/2);
 					canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
 					try {
 						qrcode.decode();
@@ -299,7 +357,8 @@
 					//	console.log(e);
 					}
 					return;
-				}, 999);
+				}, 333);
+				console.log(window.int);
 				return;
 			}).catch(function(error) {
 				console.log(error);
@@ -346,17 +405,30 @@
 			return;
 		}
 		window.onload = function() {
-			document.getElementById("upload").addEventListener("click", function(e) {
+			document.getElementById("nav")
+				.addEventListener("click", function(e) {
+				if(this.getAttribute("style")) {
+					this.removeAttribute("style");
+				} else {
+					this.style.overflow = "auto";
+					this.style.height = "auto";
+				}
+				return;
+			});
+			document.getElementById("upload")
+				.addEventListener("click", function(e) {
 				type = "up";
 				camera(document.getElementById("reader"));
 				return;
 			});
-			document.getElementById("download").addEventListener("click", function(e) {
+			document.getElementById("download")
+				.addEventListener("click", function(e) {
 				type = "dl";
 				camera(document.getElementById("reader"));
 				return;
 			});
-			document.getElementById("reader").addEventListener("click", function(e) {
+			document.getElementById("reader")
+				.addEventListener("click", function(e) {
 				if(type !== undefined && type.length > 3) {
 					let canvas = document.getElementById("qr-canvas");
 					let video = document.getElementsByTagName("video")[0];
@@ -364,8 +436,9 @@
 						+ window.location.protocol
 						+ "//"
 						+ window.location.hostname
-						+ ":"
-						+ window.location.port
+						+ ((window.location.port)
+							? (":" + window.location.port)
+							: "")
 						+ window.location.pathname
 						+ "?"
 						+ type;
@@ -382,13 +455,16 @@
 				kill();
 				return;
 			});
-			document.getElementById("viewer").addEventListener("click", function(e) {
+			document.getElementById("viewer")
+				.addEventListener("click", function(e) {
+				type = null;
 				this.style.backgroundImage = "";
 				this.style.backgroundSize = "";
 				this.style.zIndex = "";
 				return;
 			});
 			document.getElementById("local").addEventListener("click", function(e) {
+				type = "see";
 				let stor = window.localStorage;
 				let main = document.getElementById("main");
 				let orig = main.innerHTML;
@@ -419,13 +495,19 @@
 				main.style.visibility = "visible";
 				return;
 			});
-			document.getElementById("code").addEventListener("click", function(e) {
+			document.getElementById("code")
+				.addEventListener("click", function(e) {
+				type = "gen";
 				camera(document.getElementById("reader"), (Date.now() + ":" + Math.random()));
 				return;
 			});
 			document.getElementById("trash").addEventListener("click", function(e) {
 				if(confirm("are you sure?" + "\n" + "this will clear local cache only"))
 					window.localStorage.clear();
+				return;
+			});
+			document.body.addEventListener("click", function(e) {
+				window.location.hash = type;
 				return;
 			});
 			if(window.location.search.length > 0) {
@@ -439,7 +521,8 @@
 			return;
 		};
 		function getPerm() {
-			navigator.mediaDevices.getUserMedia({video:true}).then(function(stream) {
+			navigator.mediaDevices.getUserMedia({video:true})
+				.then(function(stream) {
 				setTimeout(function(e) {
 					stream.getTracks().forEach(function(track) {
 						track.stop();
