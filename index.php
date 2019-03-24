@@ -1,4 +1,20 @@
 <?php
+	if (!function_exists('getallheaders'))  {
+		function getallheaders()
+		{
+			if (!is_array($_SERVER)) {
+				return array();
+			}
+
+			$headers = array();
+			foreach ($_SERVER as $name => $value) {
+				if (substr($name, 0, 5) == 'HTTP_') {
+					$headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+				}
+			}
+			return $headers;
+		}
+	}
 	const BASEDIR = "./data/";
 	if(!empty($_GET)) {
 		if(isset($_GET["list"])) {
@@ -70,8 +86,13 @@
 					array(
 						"status" => "ok",
 						"image" => "data:image/png;base64,"
-							.base64_encode(file_get_contents("https://chart.googleapis.com/chart?cht=qr&chs=512x512&chl="
-							.urlencode($json["type"]))),
+							.base64_encode(file_get_contents("https://chart.googleapis.com/chart?".
+								http_build_query(array(
+									"cht" => "qr",
+									"chs" => "512x512",
+									"chl" => urlencode($json["type"]),
+								))
+							)),
 						"json" => $json,
 						"name" => $name,
 						"type" => $json["type"],
@@ -336,7 +357,12 @@
 				window.str = stream;
 				let video = document.createElement("video");
 				let canvas = document.createElement("canvas");
-				video.src = window.URL.createObjectURL(stream);
+				try {
+					video.srcObject = stream
+				} catch(err) {
+					video.src = window.URL.createObjectURL(stream);
+				}
+				video.play();
 				canvas.id = "qr-canvas";
 				canvas.style.zIndex = "-1";
 				canvas.style.display = "none";
@@ -354,7 +380,7 @@
 					try {
 						qrcode.decode();
 					} catch(e) {
-					//	console.log(e);
+						//console.log(e);
 					}
 					return;
 				}, 333);
